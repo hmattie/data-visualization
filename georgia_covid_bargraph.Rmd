@@ -1,0 +1,114 @@
+---
+title: "The Importance of COVID-19 Data Visualizations"
+output: html_document
+---
+
+Data visualization is an incredibly powerful tool that can affect health policy decisions. Ensuring they are easy to interpret, and more importantly, showcase accurate insights from data is paramount for scientific transparency and the health of individuals. 
+
+In May 2020, the [Georgia Department of Public Health](https://dph.georgia.gov/covid-19-daily-status-report) posted the following plot to illustrate the number of confirmed COVID-19 cases in their hardest-hit counties over a two-week period. 
+
+![](georgia_dph_bad.png)
+
+Health officials claimed that the plot provided evidence that COVID-19 cases were decreasing and made the argument for reopening the state. The plot was heavily criticized by the statistical community and several media outlets for its deceptive portrayal of COVID-19 trends in Georgia. The major deficiencies of the plot were
+
+1. The dates on the x-axis are not in chronological order
+2. The bar order is not consistent across days
+3. This type of plot makes it very difficult to assess individual county trends
+
+Whether the end result was due to malicious intent or simply poor judgment, it is incredibly irresponsible to publish data visualizations that obscure and distort the truth. 
+
+Here we show how to create the corrected plot and other, better visualizations for this data. We borrow ideas and code from Peter Ellis's [blog post](http://freerangestats.info/blog/2020/05/23/ordering-in-bar-charts). 
+
+We start with how to create the corrected plot. We will use the [*New York Times* COVID-19 data](https://github.com/nytimes/covid-19-data) to get county-level information for Georgia. The numbers look slightly different from the ones reported by the Georgia DPH, but that's okay for our purposes.
+
+```{r, message=FALSE, warning=FALSE}
+# Load packages
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+```{r, message=FALSE, warning=FALSE}
+# Read in data
+us_counties = read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+head(us_counties)
+```
+
+
+First, we create a new data frame called `georgia_counties` that only contains the data from the 5 counties in Georgia and add a new variable called `new_cases` that stores the number of new confirmed cases for each day at the county level.
+
+```{r}
+counties <- c("Cobb", "DeKalb", "Fulton", "Gwinnett", "Hall")
+
+georgia_counties = us_counties %>%
+  filter(state == "Georgia", county %in% counties) %>%
+  group_by(county) %>%
+  arrange(date) %>%
+  mutate(new_cases = cases - lag(cases)) %>% 
+  ungroup()
+
+head(georgia_counties)
+```
+
+Next we subset the data to only include observations during the two weeks presented in the plot, April 26, 2020 to May 9, 2020.  
+
+```{r}
+georgia_counties <- georgia_counties %>% 
+	filter(date >= as.Date("2020-04-26")) %>%
+	filter(date <= as.Date("2020-05-09"))
+
+head(georgia_counties)
+```
+
+Now we are set to create the corrected plot. 
+
+```{r, fig.width=10}
+georgia_counties %>% ggplot(aes(x = date, weight = new_cases, fill = county)) +
+	geom_bar(position = position_dodge(), color = "black", aes(group = county)) + 
+	ggtitle("Top 5 Counties with the Greatest Number of Confirmed COVID-19 Cases") +
+	xlab("") + 
+	ylab("New Cases") +
+	scale_fill_discrete(name = "County") +
+	scale_x_date(breaks = seq(as.Date("2020-04-26"), as.Date("2020-05-09"), by="1 day"),
+							 date_labels = "%d%b%Y", guide = guide_axis(n.dodge = 2))
+```
+
+We can see that the number of cases does not decrease over the two-week period, as the original plot suggested. While much improved, the clustered barplot still makes it difficult to compare trends over time in the five counties. We can present the trends using smoothed line graphs instead for easier and quicker interpretation.
+
+```{r, fig.width=10, message=FALSE, warning=FALSE}
+georgia_counties %>% ggplot(aes(x = date, y = new_cases, color = county)) +
+	geom_smooth(se = FALSE, span = 0.5, method = "loess") +
+	ggtitle("Top 5 Counties with the Greatest Number of Confirmed COVID-19 Cases") +
+	xlab("") + 
+	ylab("New Cases") +
+	scale_color_discrete(name = "County") +
+	scale_x_date(breaks = seq(as.Date("2020-04-26"), as.Date("2020-05-09"), by="1 day"),
+							 date_labels = "%d%b%Y", guide = guide_axis(n.dodge = 2))
+```
+
+
+Finally, we can plot each of the trends separately to make it even easier to assess the trends. 
+
+```{r, fig.width=10, message=FALSE, warning=FALSE}
+georgia_counties %>% ggplot(aes(x = date, y = new_cases, color = county)) +
+	geom_smooth(se = FALSE, span = 0.5, method = "loess") + 
+	ggtitle("Top 5 Counties with the Greatest Number of Confirmed COVID-19 Cases") +
+	xlab("") + 
+	ylab("New Cases") +
+	scale_color_discrete(name = "County") +
+	facet_wrap(~ county) +
+	scale_x_date(breaks = seq(as.Date("2020-04-26"), as.Date("2020-05-09"), by="1 day"), 
+							 date_labels = "%d%b%Y") +
+	theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+This provides an even clearer picture of the trends in new cases and provides a strong argument that the case count in each of these counties has not been decreasing steadily over this two-week timeline. 
+
+
+
+
+
+
+
+
